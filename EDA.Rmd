@@ -1,0 +1,577 @@
+---
+title: "红酒数据集探索性数据分析"
+author: "钱忠华"
+date: "2017年10月6日"
+output: html_document
+---
+
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(fig.width=10, fig.height=6, fig.path='Figs/',
+                      echo=FALSE, warning=FALSE, message=FALSE)
+```
+
+# 1.载入包
+```{r}
+library(ggplot2)
+library(knitr)
+require(dplyr)
+library(GGally)
+library(reshape2)
+#install.packages("psych")
+library(psych)
+#install.packages("memisc")
+library(memisc)
+```
+
+# 2.数据概况
+数据集总共有12个变量，1599个样本数据。
+```{r}
+Redwine <- read.csv("wineQualityReds.csv")
+str(Redwine)
+head(Redwine)
+```
+查看变量的summary信息
+```{r}
+summary(Redwine)
+```
+
+可以看到每个变量都没有缺失值，这为后面的探索性分析带来很大便利。
+
+# 3 单变量画图
+## 3.1 品质quality的分布
+```{r}
+p <- ggplot(data=Redwine)
+p + geom_bar(aes(quality)) + xlim(c(2,9))
+```
+
+quality 总体呈现正态分布,最低得分3.0分，最高得分8.0分，平均值6.0分，没有明显的异常值。
+
+## 3.2 各种酸的分布
+### fixed.acidity的分布
+```{r}
+p + geom_histogram(aes(fixed.acidity), binwidth = 0.5) + 
+  scale_x_continuous(breaks = seq(3, 16, 0.5))
+```
+
+fixed.acidity呈现正偏态分布, 平均值等于8.32.
+
+### volatile.acidity的分布
+```{r}
+summary(Redwine$volatile.acidity)
+p + geom_histogram(aes(volatile.acidity), binwidth = 0.02) + 
+  scale_x_continuous(breaks = seq(0.1, 1.6, 0.1))
+```
+
+volatile.acidity有两个明显的峰，横坐标对应约为0.4和0.6，总的平均值等于0.53。
+
+### citric.acid的分布
+```{r}
+summary(Redwine$citric.acid)
+p + geom_histogram(aes(citric.acid), binwidth = 0.01) + 
+  scale_x_continuous(breaks = seq(0, 1, 0.1))
+```
+
+citric.acid的分布出现多个峰值，有几个特殊的值的计数比较多，噪声比较大，平均值等于0.27。与前面的fixed.acidity的含量相比，volatile.acidity和citric.acid含量低一个量级。这说明在红葡萄酒中，酒石酸占主要成分，挥发酸和柠檬酸属于添加剂成分。
+
+### pH的分布
+```{r}
+summary(Redwine$pH)
+p + geom_histogram(aes(pH), binwidth = 0.05) + 
+  scale_x_continuous(breaks = seq(2.7, 4.1, 0.1))
+```
+
+pH值呈现正态分布，在2.7-4.0之间，平均值为3.3。
+
+## 3.3硫化物含量分布
+### free.sulfur.dioxide分布
+```{r}
+summary(Redwine$free.sulfur.dioxide)
+p + geom_histogram(aes(free.sulfur.dioxide), binwidth = 2) + 
+  scale_x_continuous(breaks = seq(1, 72, 2))
+
+```
+
+溶解性二氧化硫含量平均值是15.87，其中有较长的尾部数据。
+
+### total.sulfur.dioxide分布
+```{r}
+summary(Redwine$total.sulfur.dioxide)
+p + geom_histogram(aes(total.sulfur.dioxide), binwidth = 2) + 
+  scale_x_continuous(breaks = seq(6, 289, 20))
+p + geom_histogram(aes(total.sulfur.dioxide)) + 
+  scale_x_log10()
+```
+
+total.sulfur.dioxide平均值是46.67，取对数坐标后，满足正态分布。
+
+### sulphates分布
+```{r}
+summary(Redwine$sulphates)
+quantile(Redwine$sulphates, 0.90)
+p + geom_histogram(aes(sulphates), binwidth = 0.01) + 
+  scale_x_continuous(breaks = seq(0.3, 1.26, 0.1))
+p + geom_histogram(aes(sulphates), binwidth = 0.01) + 
+  scale_x_log10()
+```
+
+把横坐标取对数后，满足正态分布，平均值是0.66.
+
+## 3.4糖residual.sugar、乙醇alcohol、密度density分布
+### 糖residual.sugar分布
+```{r}
+summary(Redwine$residual.sugar)
+p + geom_histogram(aes(residual.sugar)) 
+p + geom_histogram(aes(residual.sugar)) + 
+  xlim(0, 4.12)
+```
+```{r}
+sd(subset(Redwine$residual.sugar, Redwine$residual.sugar<4))
+mean(subset(Redwine$residual.sugar, Redwine$residual.sugar<4))
+```
+
+糖类在(0,4)区间内满足正态分布，平均值2.2，方差0.48，在(4, 16)内有很长的尾巴。
+
+### 乙醇alcohol分布
+```{r}
+summary(Redwine$alcohol)
+p + geom_histogram(aes(alcohol), binwidth = 0.5) 
+```
+
+乙醇主要集中在8.4到15之间，平均值是10.4.
+
+### 密度density分布
+```{r}
+summary(Redwine$density)
+p + geom_histogram(aes(density))
+```
+
+密度满足很好的正态分布，平均值0.997.
+
+### 酸酒比acid_by_alcohol
+
+品尝葡萄酒主要依靠味觉，而一般人对于酒精和酸的味道比较敏感，所以我构造出了一个新的变量**酸酒比acid_by_alcohol**，其中酸包含酒石酸、挥发性酸和柠檬酸的总和。
+```{r}
+Redwine$acid_by_alcohol <- (Redwine$fixed.acidity + Redwine$volatile.acidity + Redwine$citric.acid)/Redwine$alcohol
+summary(Redwine$acid_by_alcohol)
+```
+```{r}
+ggplot(data=Redwine,aes(acid_by_alcohol)) +
+  geom_histogram() + scale_x_continuous(breaks = seq(0,2,0.1))
+```
+
+可以看到酸酒比acid_by_alcohol满足正态分布，平均值是0.88.
+
+## 单变量分析小结
+### **你的数据集结构是什么？**
+
+本次项目使用的红酒数据集总共有1599个样本数据，12个特征，他们分别是：
+
+- fixed.acidity: 非挥发性酸（酒石酸）含量($g/cm^{3}$)
+- volatile.acidity： 挥发性酸（乙酸）含量($g/cm^{3}$)，太高容易导致醋味
+- citric.acid： 柠檬酸含量($g/cm^{3}$)，可以增加红葡萄酒的新鲜度和口感
+- residual.sugar: 发酵停止后的剩余糖含量($g/L$),正常含量小于1$g/L$,大于45$g/L$被认为太甜了
+- chlorides：酒中的氯化物无机盐含量
+- free.sulfur.dioxide：溶解在葡萄酒中的$SO_{2}$气体含量($ppm$)，可以抑制微生物和防止氧化。含量如果超过50ppm，气味和味道很明显
+- total.sulfur.dioxide: 包含气体和亚硫酸根中的$SO_{2}$的含量
+- density: 葡萄酒的密度($g/cm^3$)，应该接近水，取决于酒精和糖分的含量
+- pH： pH值。小于7呈碱性，大于7呈酸性。
+- sulphates：硫酸盐，一种葡萄酒添加剂，和$SO_{2}$含量有关，可以防氧化和抗菌。
+- alcohol：酒精含量百分比
+- quality：葡萄酒品质得分，范围在0-10分
+除了quality是int型变量，其他全是num型变量。
+
+#### **你的数据集有哪些有趣的特点？**
+
+-  quality与alcohol、volatile.acidity相关性最大，说明酒精度和醋酸对评分至关重要，酒精度数稍微高一点，醋酸成分少一些，红葡萄酒的评分更高。
+- 影响pH值的主要是fixed.acidity，其次是citric.acid。
+
+#### **还有哪些特点能够帮助你探究你感兴趣的特征？**
+
+- 影响密度的主要是糖类residual.sugar（正相关）和酒精alcohol（负相关）。
+- 溶解的$SO_{2}$free.sulfur.dioxide和总的亚硫酸根total.sulfur.dioxide有很强的正相关性，可以利用这点降维。
+
+#### **你是否从已有特征中创造了新特征？**
+
+是的，我构造了一个新变量：**酸酒比**。满足正态分布，在后面的两变量分析中将会考虑这个新特征与其他特征之间的关系。
+
+####**在你探究的特征中，有没有异常分布？你有没有采取什么措施来整理、调整或者改变数据的格式？如果有，说说理由。**
+
+在单变量分析过程中，发现residual.sugar分布存在异常。该变量在（0，4）区间内基本满足正态分布，平均值是2.2，标准差是0.48，舍弃四个标准差意外的数据，因此在4.12处截断，舍弃在（4.12,16）的数据。
+
+# 4 两变量画图
+
+## 4.1相关性分析
+先来看看各个变量之间的相关性。计算相关性系数矩阵，绘制热图。结果如下
+```{r}
+pairs.panels(Redwine[2:14])
+cormat <- round(cor(Redwine[2:14]), 2)
+melted_cormat <- melt(cormat)
+ggplot(data = subset(melted_cormat, abs(value)>0.3), aes(x=Var1, y=Var2, fill=value)) + 
+  geom_tile() + scale_fill_gradient2(low = "blue", high = "red")
+
+```
+
+从图上可以看出几点：
+
+1. 我们最关心的quality变量与alcohol和volatile.acidity相关性较强，与其他变量的直接相关性较弱，不足0.3.原因可能有几点：第一，quality与其他变量存在较强的非线性关系，但是相关系数并不能很好地表征这种关系；第二，quality确实与某一个单一变量关系不强，但是可能与某几个变量构造的新特征有很强的关系。所以后面我们需要把quality与其他变量逐一做二元变量分析，确定原因。
+
+2. 有几个变量之间存在较强的相关性(大于0.3)。
+
+  - fixed.acidity 和 citric.acid、pH值
+  - volatile.acidity 和 citric.acid
+  - citric.acid 和 density、pH
+  - residual.sugar和density
+  - free.sulfur.dioxide和total.sulfur.dioxide
+  - chlorides和sulphates
+  - density和pH、alcohol
+  - acid_by_alcohol 和density
+
+## 4.2 quality与alcohol、volatile.acidity
+从相关系数矩阵可以看出，quality变量与alcohol和volatile.acidity相关性较强，先分析他们的关系。
+
+### quality与alcohol
+```{r}
+ggplot(data = Redwine, aes(factor(quality), alcohol)) +  
+geom_boxplot()
+
+```
+
+```{r}
+ggplot(data = subset(Redwine, alcohol < quantile(alcohol, 0.99)),   
+       aes(alcohol, fill = factor(quality))) + 
+geom_density(alpha = 0.5) + scale_fill_brewer(palette="Greens")
+```
+
+alcohol和quality呈正相关，当quality增大时，alcohol分布变宽。
+
+### quality与volatile.acidity
+```{r}
+ggplot(data = Redwine, aes(factor(quality), volatile.acidity)) +  
+geom_boxplot()
+ggplot(data = Redwine,
+       aes(volatile.acidity, fill = factor(quality))) +  
+  xlim(0, quantile(Redwine$volatile.acidity, 0.995)) + 
+geom_density(alpha = 0.5) + scale_fill_brewer(palette="Greens")
+```
+
+
+alcohol和volatile.acidity呈负相关。但是当volatile.acidity下降到0.4时，quality并没有明显的提升，开始出现饱和现象。
+
+## 4.3 quality与剩下变量的关系
+
+```{r}
+ggplot(data = Redwine, aes(factor(quality), fixed.acidity)) +  
+geom_boxplot()
+```
+```{r}
+ggplot(data = Redwine, aes(factor(quality), citric.acid)) +  
+geom_boxplot()
+ggplot(data = Redwine, aes(citric.acid, fill = factor(quality))) +  
+geom_density(alpha = 0.5)+ scale_fill_brewer(palette="Greens")
+```
+可以看出，citric.acid与quality之间呈阶跃型正相关关系。
+
+```{r}
+ggplot(data = Redwine, aes(factor(quality), residual.sugar)) +  ylim(0, 4) +
+geom_boxplot()
+```
+
+去除residual.sugar的异常值，发现与quality之间并没有明显的关系。
+
+
+```{r}
+ggplot(data = Redwine, aes(chlorides, fill = factor(quality))) +  
+geom_density(alpha = 0.5)+scale_fill_brewer(palette="Greens")
+```
+
+quality与chlorides之间也没有明显关系。
+
+```{r}
+ggplot(data = Redwine, aes(free.sulfur.dioxide, fill = factor(quality))) +  
+geom_density(alpha = 0.5)+scale_fill_brewer(palette="Greens")
+```
+```{r}
+ggplot(data = Redwine, aes(factor(quality), total.sulfur.dioxide)) +  
+geom_boxplot()
+```
+```{r}
+ggplot(data = Redwine, aes(factor(quality), density)) +  
+geom_boxplot()
+ggplot(data = Redwine, aes(density, fill = factor(quality))) +  
+geom_density(alpha = 0.5)+scale_fill_brewer(palette="Greens")
+```
+```{r}
+ggplot(data = Redwine, aes(factor(quality), pH)) +  
+geom_boxplot()
+```
+```{r}
+ggplot(data = Redwine, aes(factor(quality), sulphates)) +  
+geom_boxplot()
+ggplot(data = Redwine, aes(sulphates, fill = factor(quality))) +  
+geom_density(alpha = 0.5)+scale_fill_brewer(palette="Greens")
+```
+quality除了与citric.acid之间有一点正相关关系外，与剩下的变量没有明显的关系。
+
+
+
+## 4.3 各种酸性物质之间的关系
+### fixed.acidity与pH
+```{r}
+ggplot(data = Redwine, aes(log10(fixed.acidity), pH)) +  
+geom_point(alpha = 0.5) + geom_smooth(method = "lm")
+options(digits = 3)
+cor(Redwine$fixed.acidity, Redwine$pH)
+cor(log10(Redwine$fixed.acidity), Redwine$pH)
+summary(Redwine$fixed.acidity)
+```
+
+fixed.acidity与pH的相关系数是-0.68，因为pH值是根据溶液中氢离子含量的对数计算出来的，因此将fixed.acidity取对数，转化坐标后的相关系数是-0.71。
+
+### fixed.acidity与citric.acid
+```{r}
+ggplot(data = subset(Redwine, citric.acid > 0.1), 
+       aes((fixed.acidity), citric.acid)) +  
+geom_point(alpha = 0.5) +geom_smooth(method = "lm")
+```
+
+在citric.acid含量较高（大于0.6）时，fixed.acidity和citric.acid相关性并不强，但是当
+含量较低时，呈现出正相关性。
+
+### citric.acid与pH
+```{r}
+ggplot(data = Redwine, aes(citric.acid, pH)) +  
+geom_point(alpha = 0.5, position = "jitter") + geom_smooth(method = "lm")
+cor(Redwine$citric.acid, Redwine$pH)
+summary(Redwine$citric.acid)
+```
+
+citric.acid与pH相关系数是-0.54，由于citric.acid含量大约是fixed.acidity的3%，因此对pH的影响要小一些。
+
+### citric.acid与density
+```{r}
+ggplot(data = Redwine, aes(citric.acid, density)) +  
+geom_point(alpha = 0.5, position = "jitter") + geom_smooth(method = "lm")
+```
+
+### residual.sugar和density
+```{r}
+ggplot(data = Redwine, aes(residual.sugar, density)) +  
+geom_point(alpha = 0.5, position = "jitter") + geom_smooth(method = "lm")
+```
+
+糖分和密度的相关性很强，但存在异常值，于是限定residual.sugar的坐标。
+```{r}
+summary(Redwine$residual.sugar)
+ggplot(data = Redwine, aes(residual.sugar, density)) +  
+geom_point(alpha = 0.5, position = "jitter") + xlim(0.9, 4) +
+geom_smooth(method = "lm") 
+```
+
+```{r}
+summary(Redwine$residual.sugar)
+ggplot(data = Redwine, aes(residual.sugar, density, color = alcohol)) +  
+geom_point(alpha = 0.5, position = "jitter") + xlim(0.9, 4) + 
+geom_smooth(method = "lm") + scale_color_continuous(low = "blue", high = "red")
+```
+
+### free.sulfur.dioxide和total.sulfur.dioxide
+```{r}
+ggplot(data = Redwine, aes(free.sulfur.dioxide, total.sulfur.dioxide)) +  
+geom_point(alpha = 0.5, position = "jitter") + ylim(0, 175) +
+geom_smooth(method = "lm") 
+cor(Redwine$free.sulfur.dioxide, Redwine$total.sulfur.dioxide)
+```
+
+free.sulfur.dioxide和total.sulfur.dioxide有较强的正相关性，而且随着free.sulfur.dioxide的增大，方差也在变大。
+
+### chlorides和sulphates
+```{r}
+ggplot(data = Redwine, aes(chlorides, sulphates)) +  
+geom_point(alpha = 0.5, position = "jitter") 
+ggplot(data = Redwine, aes(chlorides, sulphates)) +  
+geom_point(alpha = 0.5, position = "jitter") + xlim(0,0.2)
+```
+
+由于chlorides存在异常值，使得相关系数算出来较大（0.37），但是分析散点图可以看出，两者并没有什么直接的关系。
+
+### density和alcohol
+```{r}
+ggplot(data = Redwine, aes(density, alcohol)) +  
+geom_point(alpha = 0.5, position = "jitter") + xlim(0.990, 1.001)+ geom_smooth(method ="lm")
+```
+density与alcohol呈现明显负相关关系。
+
+### acid_by_alcohol与density
+
+```{r}
+ggplot(data = Redwine, aes(density, acid_by_alcohol)) +  
+geom_point(alpha = 0.5, position = "jitter") + geom_smooth(method ="lm")
+```
+
+从相关系数可以看出，acid_by_alcohol与fixed.acidity、alcohol、pH值之间有较强相关性，这些都容易理解，因为构造该特征就是利用了这些变量。但是一个例外的发现是，acid_by_alcohol与density也有很强的关系。
+
+## 两变量分析
+### **谈一谈在这部分你观察到的一些关系。这些你感兴趣的特征之间是如何变化的？**
+
+红酒的品质主要和酒精含量和挥发性酸含量有关。
+
+alcohol和quality呈正相关，当quality增大时，alcohol分布变宽。
+
+alcohol和volatile.acidity呈负相关。但是当volatile.acidity下降到0.4时，quality并没有明显的提升，开始出现饱和现象。
+
+### **除了你感兴趣的特征，你还观察到了其他有意思的关系吗？**
+
+pH主要和fixed.acidity的含量有关，并且将fixed.acidity坐标取对数后，相关系数由原来的-0.68提升至-0.71。这与pH的定义是吻合的。
+
+去除糖分中的异常值，发现糖分和密度存在较强的相关性。
+
+free.sulfur.dioxide和total.sulfur.dioxide有较强的正相关性，而且随着free.sulfur.dioxide的增大，方差也在变大。
+
+acid_by_alcohol与density有很强的线性关系。
+
+### **哪种关系之间相关性最强？**
+红酒质量和酒精含量之间相关性最大，在其他特征中，pH值和fixed.acidity含量之间相关性最大。
+
+# 5.多变量画图
+## 5.1 quality、volatile.acidity、citric.acidity的关系
+
+```{r}
+ggplot(data = Redwine, aes(volatile.acidity, citric.acid, color= factor(quality))) +  geom_point(position = "jitter", alpha = 0.5) + scale_colour_brewer(palette="Greens")+
+  ggtitle("Relation between quality and volatile.acidity by different citric acid ")+
+  theme(plot.title = element_text(hjust = 0.5)) + geom_smooth(method = "lm")
+```
+
+柠檬酸与挥发性酸之间存在负相关关系，但是在不同的quality下，斜率基本信息相同，这说明柠檬酸含量对质量影响不大。
+
+## 5.2 quality, alcohol, density
+```{r}
+ggplot(data = Redwine, aes(alcohol, density)) +  geom_point(position = "jitter", alpha = 0.5) + geom_smooth(method="lm")+
+  facet_wrap(~Redwine$quality) +
+  ggtitle("Density and alcohol under different quality score") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+对于不同品质的红酒，密度和酒精含量均呈现负相关,拟合的斜率差别并不大。但是在quality=3、4、8的数据点比较稀疏，所以需要更多的数据点，才能给出更有说服力的结论。
+
+## 5.3 density、alcohol、residual.sugar
+```{r}
+ggplot(data = Redwine, aes(alcohol,density, color= residual.sugar)) +  geom_point(position = "jitter", alpha = 0.7) + 
+  scale_color_continuous(low = "blue", high = "red") + 
+  ggtitle("Density and alcohol by different residual.sugar ")+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+密度和酒精含量成负相关，和糖分含量成正相关。
+
+## 5.4 quality、alcohol、acid_by_alcohol
+```{r}
+ggplot(data = Redwine, aes(alcohol, acid_by_alcohol)) +  geom_point(position = "jitter", alpha = 0.5) + geom_smooth(method="lm")+
+  facet_wrap(~Redwine$quality) +
+  ggtitle("Alcohol and acid_by_alcohol under different quality score") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+```{r}
+ggplot(data = Redwine, aes(alcohol,density, color= residual.sugar)) +  geom_point(position = "jitter", alpha = 0.7) + 
+  scale_color_continuous(low = "blue", high = "red") + 
+  ggtitle("Density and alcohol by different residual.sugar ")+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+quality的分布方差很大，不同的quality下，acid_by_alcohol与alcohol线性关系并没有什么不同。
+
+
+## 5.5 建立模型
+```{r}
+m1 <- lm(I(quality) ~ I(alcohol), data = Redwine)
+m2 <- update(m1, ~ . + volatile.acidity)
+m3 <- update(m2, ~ . + citric.acid)
+m4 <- update(m3, ~ . + density)
+mtable(m1, m2, m3, m4)
+```
+
+虽然建立了模型，但是预测能力并不好，$R^2\approx 0.319$，从分析过程来看，确实发现quality和目前变量之间相关性较弱，可能需要更有效的特征。
+
+## 多变量分析
+### **关于感兴趣的特征，是否存在其他特征之间互相增强的现象？**
+
+在多变量分析过程中，并没有发现其他特征之间的增强现象。这可能是因为选取的特征效果不好，也有可能是数据集不够大。
+
+### **特征之间是否存在有趣的相互作用关系？**
+
+密度和酒精含量成负相关，和糖分含量成正相关。
+
+### **你是否创建了一个模型，讨论一下模型的优势和劣势。**
+
+是，这个模型选取了酒精含量、挥发性酸含量、柠檬酸含量、密度作为特征，采用多元线性回归模型。优势是计算简单，劣势是预测能力比较差。
+
+# 6. 最终图形和总结
+## 图1
+```{r}
+summary(Redwine$volatile.acidity)
+p + geom_histogram(aes(volatile.acidity), binwidth = 0.02) + 
+  scale_x_continuous(breaks = seq(0.1, 1.1, 0.1)) +
+  xlim(0, 1.1) +
+  labs(title = "Distribution of volatile acidity")+
+  xlab("volatile.acidity(g/cm3)")+
+  ylab("count")+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+描述1：挥发性酸(volatile.acidity)的分布有两个峰，可能是因为存在两种不同风格的葡萄酒。
+
+## 图2
+```{r}
+ggplot(data = Redwine, aes(factor(quality), alcohol)) +  
+geom_boxplot()+
+xlab("alcohol(percent)")+ggtitle("Alcohol by different quality") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+描述2：alcohol和quality呈正相关，当quality增大时，alcohol分布变宽。
+
+## 图3
+
+```{r}
+ggplot(data = Redwine, aes(factor(quality), volatile.acidity)) +  
+geom_boxplot() + 
+  xlab("volatile.acidity(g/cm3)")+
+  ggtitle("Count of volatile.acidity by different factor") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+描述3：
+quality和volatile.acidity呈负相关关系。当volatile.acidity低至0.4时，不再是影响
+quality的主要因素。
+
+
+## 反思
+
+我首先通过单变量分析了每种变量的分布情况，检查是否存在异常值，了解平均数等信息，对数据有一个宏观的把握。然后再分析变量两两之间的关系，特别是红酒的质量与哪些因素关联比较大，发现红酒与酒精度和挥发性酸含量密切相关。除此之外，还发现了其他变量之间的相关性，比如密度和酒精、溶解性硫化物和亚硫酸根含量。最后进行多元分析，看看三个相关系数较高的变量之间是否存在规律。
+
+分析过程中发现有几个问题。第一，红酒质量确实和很多因素关系不大，这意味着数据中有效的特征并不多，但也有可能是我没有构造出好的特征。第二，数据量并不大。例如在分析密度、酒精含量、红酒质量之间的关系时，由于3分的红酒数据量较少，导致某些图数据点稀薄，不能给出有说服力的变量之间的关系。第三，某些特征之间存在很强的相关性，比如溶解性硫化物和亚硫酸根含量，实际建立模型时可以考虑针对这些特征降维。
+
+下一步的建议：首先再收集更多的数据，尤其是quality分布两边的数据，这对于评估不同quality，某些变量之间的线性关系很有用。另外，查阅文献了解到，糖酸比可能对红酒的质量有影响，可以具体分析一下糖酸比这个变量和质量之间的关系。
+
+# 7. 参考资料
+- [RColorBrewer包](http://www.cnblogs.com/homewch/p/5704153.html#autoid-0-0-0)
+- [Quick correlation matrix heatmap ](http://www.sthda.com/english/wiki/ggplot2-quick-correlation-matrix-heatmap-r-software-and-data-visualization)
+- [怎样读酒标辨识美酒](http://wine.baike.com/article-1307115.html)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
